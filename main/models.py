@@ -45,37 +45,100 @@ class Purchase(models.Model):
     vendor=models.ForeignKey(Vendor, on_delete=models.CASCADE)
     qty=models.FloatField()
     price=models.FloatField()
-    total_amount=models.FloatField()
+    total_amount=models.FloatField(editable=False,default=0)
     purchase_date=models.DateTimeField(auto_now_add=True)
         
     class Meta:
         verbose_name_plural = '4. Purchases'
 
+    def save(self,*args,**kwargs):
+        self.total_amount=self.qty*self.price
+        super(Purchase, self).save(*args,**kwargs)
+
+        # Inventory
+        inventory = Inventory.objects.filter(product=self.product).order_by('-id').first()
+        if inventory:
+            total_balance=inventory.total_balance_qty+self.qty
+        else:
+            total_balance=self.qty
+        
+        Inventory.objects.create(
+            product=self.product,
+            purchase=self,
+            sale=None,
+            purchase_qty=self.qty,
+            sale_qty=None,
+            total_balance_qty=total_balance            
+        )
+        
+
     # def __str__(self):
     #     return self.product
 
-# Sale model
-class Sale(models.Model):
-    product=models.ForeignKey(Product, on_delete=models.CASCADE)
-    qty=models.FloatField()
-    price=models.FloatField()
-    total_amount=models.FloatField()
-    sale_date=models.DateTimeField(auto_now_add=True)
+# Customer model
+class Customer(models.Model):
     customer_name=models.CharField(max_length=50,blank=True)
     customer_mobile=models.CharField(max_length=15, blank=False)
     customer_address=models.TextField()
 
     class Meta:
+            verbose_name_plural = '7. Customers'
+    def __str__(self):
+        return self.customer_name
+    
+# Sale model
+class Sale(models.Model):
+    product=models.ForeignKey(Product, on_delete=models.CASCADE)
+    customer=models.ForeignKey(Customer, on_delete=models.CASCADE, null=True)
+    qty=models.FloatField()
+    price=models.FloatField()
+    total_amount=models.FloatField(editable=False)
+    sale_date=models.DateTimeField(auto_now_add=True)
+  
+
+    class Meta:
         verbose_name_plural = '5. Sales'
+    
+    def save(self,*args,**kwargs):
+        self.total_amount=self.qty*self.price
+        super(Sale, self).save(*args,**kwargs)
+
+
+        # Inventory
+        inventory = Inventory.objects.filter(product=self.product).order_by('-id').first()
+        if inventory:
+            total_balance=inventory.total_balance_qty-self.qty
+        # else:
+        #     total_balance=inventory.total_balance_qty
+        
+        Inventory.objects.create(
+            product=self.product,
+            purchase=None,
+            sale=self,
+            purchase_qty=None,
+            sale_qty=self.qty,
+            total_balance_qty=total_balance            
+        )
 
 # Inventory model
 class Inventory(models.Model):
     product=models.ForeignKey(Product, on_delete=models.CASCADE)
-    purchase=models.ForeignKey(Purchase, on_delete=models.CASCADE, default=0)
-    sale=models.ForeignKey(Sale, on_delete=models.CASCADE, default=0)
-    purchase_qty=models.FloatField(default=0)
-    sale_qty=models.FloatField(default=0)
+    purchase=models.ForeignKey(Purchase, on_delete=models.CASCADE, default=0, null=True)
+    sale=models.ForeignKey(Sale, on_delete=models.CASCADE, default=0, null=True)
+    purchase_qty=models.FloatField(default=0, null=True)
+    sale_qty=models.FloatField(default=0, null=True)
     total_balance_qty=models.FloatField()
 
     class Meta:
         verbose_name_plural = '6. Inventory'
+    
+    def product_unit(self):
+        return self.product.unit.title
+    
+    def purchase_date(self):
+        if self.purchase:
+            return self.purchase.purchase_date
+    
+    def sale_date(self):
+        if self.sale:
+            return self.sale.sale_date
